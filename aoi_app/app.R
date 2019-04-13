@@ -313,37 +313,49 @@ server <- function(input, output) {
         # get content / image
         stimulus.content <- global.stimuli[isolate(input$select_stimulus), 'Content']
         
-        # get stimulus name from 
+        # get stimulus name from global eye data
         stimulus.name <- global.eye.data[global.eye.data$Content == stimulus.content, 'Stimulus'][1]
         
-        # get eye data from global eye data, specifically info for given stimulus + eye fixation
+        # get eye data from global eye data, specifically info for given stimulus + eye fixation for participants that are selected
         stimulus.eye.data <- global.eye.data[global.eye.data$Stimulus == stimulus.name & 
                                                  global.eye.data$Category.Group == 'Eye' &
                                                  global.eye.data$Category == 'Fixation' &
                                                  global.eye.data$Participant %in% isolate(input$select_participants), ]
         
+        # convert x and y fixation position data + event duration data to numeric values
         stimulus.eye.data$Fixation.Position.X..px. <- as.numeric(stimulus.eye.data$Fixation.Position.X..px.)
         stimulus.eye.data$Fixation.Position.Y..px. <- as.numeric(stimulus.eye.data$Fixation.Position.Y..px.)
         stimulus.eye.data$Event.Duration..ms. <- as.numeric(stimulus.eye.data$Event.Duration..ms.)
         
+        
         # upsample for kernel density estimation
         hz = 30
+        
+        # create x and y samples (fixation positions + upsampled duration converted to hertz + divided by 1000)
         x.samples <- rep(stimulus.eye.data$Fixation.Position.X..px., 
                          as.integer(stimulus.eye.data$Event.Duration..ms. * hz / 1000))
         y.samples <- rep(stimulus.eye.data$Fixation.Position.Y..px., 
                          as.integer(stimulus.eye.data$Event.Duration..ms. * hz / 1000))
         
+        # kernel density estimation in 2d with x and y samples,
+        # n = number of grid points in each direction, lims = limits of rectangle (size of image)
         k <- kde2d(x.samples, y.samples, n = 300, lims = c(0, 1280, 0, 1024))
         
+        # set up heatmap colors
         heatmap.colors <- c("#FFFFFF00", "#00FF007A", "#48FF007A", "#91FF007A", "#DAFF007A", 
                                          "#FFDA007A", "#FF91007A", "#FF48007A", "#FF00007A")
+        
+        # display image of given x, y variables in k, kernel density with given colors,
+        # given ranges of x and y, add = TRUE (adds to current plot)
         image(k, col = heatmap.colors, xlim = c(1,res[1]), ylim=c(res[2],1),
               asp=1, type='n', xaxs='i', yaxs='i', xlab='', ylab='', add = TRUE
         )
         
     }
     
+    # draw scanpaths function
     draw_scanpaths <- function() {
+        # get stimulus content, name and eye data based on which stimulus and participants are selected
         stimulus.content <- global.stimuli[isolate(input$select_stimulus), 'Content']
         stimulus.name <- global.eye.data[global.eye.data$Content == stimulus.content, 'Stimulus'][1]
         stimulus.eye.data <- global.eye.data[global.eye.data$Stimulus == stimulus.name & 
@@ -351,39 +363,58 @@ server <- function(input, output) {
                                                  global.eye.data$Category == 'Fixation' &
                                                  global.eye.data$Participant %in% isolate(input$select_participants), ]
         
+        # convert fixation position y and event duration to numeric values
         stimulus.eye.data$Fixation.Position.Y..px. <- as.numeric(stimulus.eye.data$Fixation.Position.Y..px.)
         stimulus.eye.data$Event.Duration..ms. <- as.numeric(stimulus.eye.data$Event.Duration..ms.)
         
+        # pch = plotting character / symbol to use
+        # set pch value to 1 == unfilled circles
         pch.val <- 1
+        
+        # if fixation index is selected, change pch value to 16 == solid circle without a border (19 would add border)
         if (isolate(input$scanpath_index)) {
             pch.val <- 16
         }
         
+        # apply function to stimulus.eye.data for each participant
         by(stimulus.eye.data, stimulus.eye.data$Participant, FUN = function(data) {
+          
+            # draw line segments for given x, y data with given colors, line width = 2, type = 'o'
             lines(x = data$Fixation.Position.X..px.,
                   y = data$Fixation.Position.Y..px., 
                   col = data$color.name,
-                  cex = data$Event.Duration..ms./80,
+                  cex = data$Event.Duration..ms./80, # QUESTION: why divided by .8?
                   type = "o",
                   lwd = 2,
                   pch = pch.val
             )
+            
+            # if fixation index is selected
             if (isolate(input$scanpath_index)) {
+              
+                # output text in plot for fixation points with labels == index
                 text(x = data$Fixation.Position.X..px.,
-                      y = data$Fixation.Position.Y..px., 
+                     y = data$Fixation.Position.Y..px., 
                      labels = data$Index,
-                      col = data$label.color,
-                     cex = 1,
+                     col = data$label.color,
+                     cex = 1, # size of labels (cex = character expansion)
                      font = 2
                 )
             }
         })
     }
     
+    # draw AOIs function
     draw_aois <- function() {
+        
+        # get stimulus name and existing AOIs
         stimulus.name <- global.stimuli[isolate(input$select_stimulus), 'Stimulus']
         stimulus.aois <- session.aois[session.aois$stimulus.name == stimulus.name, ]
+        
+        # if the selected stimulus has any AOIs
         if (nrow(stimulus.aois) > 0) {
+            
+            # 
             for (aoi in 1:nrow(stimulus.aois)) {
                 xleft <- stimulus.aois[aoi, 'xleft']
                 ybottom <- stimulus.aois[aoi, 'ybottom']
