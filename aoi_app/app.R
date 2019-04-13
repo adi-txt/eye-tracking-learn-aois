@@ -7,96 +7,141 @@
 #    http://shiny.rstudio.com/
 #
 
+# import libraries, shiny == data vis for the web app, jpeg == , MASS ==
 library(shiny)
 library(jpeg)
 library(MASS)
 
-global.eye.data <- read.delim("data/Event Statistics - Single.txt", stringsAsFactors = FALSE)
-global.stimuli <- read.csv("data/stimuli.csv", stringsAsFactors = FALSE)
-global.colors <- read.csv("data/colors.csv", stringsAsFactors = FALSE)
+# set global variables
+global.eye.data <- read.delim("data/Event Statistics - Single.txt", stringsAsFactors = FALSE) # get eye data
+global.stimuli <- read.csv("data/stimuli.csv", stringsAsFactors = FALSE) # get stimuli / images
+global.colors <- read.csv("data/colors.csv", stringsAsFactors = FALSE) # get colors
+
 global.participants <- merge(data.frame("id" = seq_along(unique(global.eye.data$Participant)), 
                                         "Participant" = unique(global.eye.data$Participant)), 
-                                        global.colors)
+                                        global.colors) # get participants, merge by ID?
+
 # Give participant eye data R-friendly colors and integer ids
 global.eye.data <- merge(global.eye.data, global.participants) 
 
+# create empty data frame for AOIs
 global.aois <- data.frame()
+
+# read AOIS if the file exists
 if (file.exists("data/aois.csv")) {
     global.aois <- read.csv("data/aois.csv", stringsAsFactors = FALSE)
 }
 
 ui <- fluidPage(
    
+    # set title with Penn logo
     titlePanel(img(src = "shield-logotype-whitebkgd-RGB-4k.png", height = "38px")),
     
     fluidRow(
         
-        column(width = 1,
-            radioButtons("select_stimulus", "Stimuli",
-                         choices = setNames(seq_along(global.stimuli$Stimulus), global.stimuli$Stimulus),
-                         selected = 1),
-            hr(),
+        # set up stimuli on the left with a column
+        column(width = 1, # set width
+            radioButtons("select_stimulus",
+                         "Stimuli",
+                         choices = setNames(seq_along(global.stimuli$Stimulus), global.stimuli$Stimulus)
+                         ),
             
-            checkboxGroupInput("select_participants", "Participants", 
-                               choiceNames = apply(global.participants, 1, function(p) { 
-                                   span(span(p['Participant']), 
+            hr(), # horizontal row?
+            
+            checkboxGroupInput("select_participants", "Participants", # input id, label
+                               choiceNames = apply(global.participants, 1, function(p) { # names
+                                  # get participant, get icon, change style, put on one line 
+                                  span(span(p['Participant']),
                                         span(icon("eye"), style = paste0("color:", p['color.name'])))
                                }),
-                               choiceValues = global.participants$Participant,
-                               selected = global.participants$Participant)
+                               choiceValues = global.participants$Participant, # choice values = participants
+                               selected = global.participants$Participant) # initially selected value
         ),
-        
-        column(width = 11,
-            
-               column(width = 9, 
-                      div(plotOutput("main_slide", height = "100%", width = "100%",
-                                 brush = brushOpts(id = "aoi_brush", resetOnNew = TRUE)), 
-                          style = "margin-top: -54px"),
-                      conditionalPanel(
-                          condition = "input.select_view_data.indexOf('aois') > -1",
-                          tableOutput("aoi_output_table")
-                      )
-                      
-                                 
-               ),
-               column(width = 3,   
-                      checkboxGroupInput("select_view_data", "Visualize Data", 
-                                         choices = list("AOIs" = "aois", 
-                                                        "Scanpaths" = "scanpaths",
-                                                        "Heatmap" = "heatmap"),
-                                         selected = c("aois")),
-                      div(
-                        checkboxInput("scanpath_index", "with fixation index", FALSE),
-                        style = "font-size:small;margin-top:-58px;margin-left:100px"
-                      ),
-                      div(
-                        downloadButton("save_image", "Save Stimulus Image"),
-                        style = "margin-top:36px"
-                      ),
-                      br(),
-                      p("Download Data", style = "font-weight:bold"),
-                      downloadButton("export_aoi_eye_data", "Save Fixation Data"),
-                      helpText("One fixation per row."),
-                      downloadButton("export_aoi_participant_stats", "Save Participant AOI Stats"),
-                      helpText("One participant and aoi per row."),
-                      downloadButton("export_aoi_stats", "Save AOI Stats"),
-                      helpText("One aoi per row."),
-                      br(),
-                      conditionalPanel(
-                          condition = "input.select_view_data.indexOf('aois') > -1",
-                          p("Define AOIs", style = "font-weight:bold"),
-                          helpText("Click and drag to draw a rectangle, then click Make AOI."),
-                          actionButton("save_aoi", "Make AOI"),
-                          uiOutput('aoi_ctls'),
-                          downloadButton("export_aoi_template", "Save AOI Template"),
-                          br(),br(),
-                          fileInput("import_aoi_template", "Upload AOI Template",
-                                    multiple = FALSE,
-                                    accept = c("text/csv",
-                                               "text/comma-separated-values,text/plain",
-                                               ".csv")),
-                          helpText("Uploading a template will clear any AOIs currently displayed on this stimulus.")
-                      )
+
+        # set up main column
+        column(width = 11, # set up width for the middle
+               
+            # column for the image, align to center
+            column(width = 9,
+                align="center",
+                # use div with slide; brushOpts sets up brush for aoi
+                div(plotOutput("main_slide", height = "100%", width = "100%",
+                           brush = brushOpts(id = "aoi_brush", resetOnNew = TRUE)), 
+                    style = "margin-top: -55px"),
+                conditionalPanel( # set up table with output IF condition satisfies
+                    condition = "input.select_view_data.indexOf('aois') > -1",
+                    tableOutput("aoi_output_table") # if satisfied, this is the output
+                )
+            ),
+               
+            # column for visualize data, downloading data, AOI stats, defining AOIs, etc.
+            column(width = 3,   
+                checkboxGroupInput("select_view_data", # input id
+                                   "Visualize Data", # label
+                                   choices = list("AOIs" = "aois",  
+                                                  "Scanpaths" = "scanpaths",
+                                                  "Heatmap" = "heatmap"),
+                                   selected = c("aois")),
+                    
+                # set up another checkbox set to FALSE by default to be placed next to scanpaths
+                div(
+                  checkboxInput("scanpath_index", "with fixation index", FALSE),
+                  style = "font-size:small;margin-top:-58px;margin-left:100px"
+                ),
+                    
+                #  set up download button div associated with save_image outputid / download handler
+                div(
+                  downloadButton("save_image", "Save Stimulus Image"),
+                  style = "margin-top:36px"
+                ),
+                    
+                br(), # line break
+                
+                # download data header
+                p("Download Data", style = "font-weight:bold"),
+                
+                # aoi fixation button div with handler, help text 
+                downloadButton("export_aoi_eye_data", "Save Fixation Data"),
+                helpText("One fixation per row."),
+                
+                # aoi participant stats button div with handler, help text 
+                downloadButton("export_aoi_participant_stats", "Save Participant AOI Stats"),
+                helpText("One participant and aoi per row."),
+                
+                # aoi stats button div with handler, help text 
+                downloadButton("export_aoi_stats", "Save AOI Stats"),
+                helpText("One aoi per row."),
+                
+                br(), # line break
+                    
+                # set up panel only if condition is satisfied
+                conditionalPanel(
+                    condition = "input.select_view_data.indexOf('aois') > -1", # condition for panel
+                    
+                    # header and help text
+                    p("Define AOIs", style = "font-weight:bold"),
+                    helpText("Click and drag to draw a rectangle, then click Make AOI."),
+                    
+                    actionButton("save_aoi", "Make AOI"), # action button connected to save_aoi input id
+                    uiOutput('aoi_ctls'), # tied to aoi_ctls renderUI in server
+                    
+                    # download to save AOI template currently created
+                    downloadButton("export_aoi_template", "Save AOI Template"),
+                    
+                    # line breaks
+                    br(),
+                    br(),
+                        
+                    # set up file input box tied to import_aoi_template event + help text
+                    fileInput("import_aoi_template", "Upload AOI Template",
+                              multiple = FALSE, # single file upload
+                              # MIME type hints at what to expect
+                              accept = c("text/csv",
+                                         "text/comma-separated-values,text/plain",
+                                         ".csv")
+                    ),
+                    helpText("Uploading a template will clear any AOIs currently displayed on this stimulus.")
+                )
             )
         )
     )
@@ -106,22 +151,34 @@ ui <- fluidPage(
 server <- function(input, output) {
     
     #session.stimuli.idx <- NULL
+    
+    # session object = environment that can be used to access info + functionality related to the session
     session.aois <- global.aois
     
+    # set new_aoi_listener to be a reactive value ()
     new_aoi_listener <- reactiveVal()
     
+    # set slide_name output to be stimulus from select_stimulus' radio buttons amongst the global.stimuli options
     output$slide_name <- renderText({
         global.stimuli[input$select_stimulus, 'Stimulus']
     })
     
+    # set main_slide's output
     output$main_slide <- renderPlot({
         
+        # get file path
         path <- normalizePath(file.path(paste0('./www/', global.stimuli[input$select_stimulus, 'Content'])))
-        jpg <- readJPEG(path, native=T) # read the file
-        res <- dim(jpg)[2:1] # get the resolution, [x, y]
+        
+        # read the file
+        jpg <- readJPEG(path, native=T)
+        
+        # get the resolution, [x, y]
+        res <- dim(jpg)[2:1]
+        
+        
         plot(1,1,
-             xlim=c(1,res[1]),
-             ylim=c(res[2],1),
+             xlim=c(1,res[1]), # x-axis limit
+             ylim=c(res[2],1), # y-axis limit
              asp=1,    # aspect ratio x/y 
              type='n', # no plotting either point or lines
              xaxs='i', # inhibit expansion of axis limits for images 
@@ -129,30 +186,45 @@ server <- function(input, output) {
              xlab='',  # no axis labels
              ylab=''
         )
+        
+        # draw image
         rasterImage(jpg, 1, res[2], res[1], 1)
+        
         #print(input$select_view_data)
+        
+        # draw heatmap if heatmap is selected in select_view_data checkbox and select_participants is > 0
         if ('heatmap' %in% input$select_view_data) {
             if (length(input$select_participants) > 0) {
                 draw_heatmap()
             }
         }
+        
+        # draw scanpaths if scan paths is selected in select_view_data
         if ('scanpaths' %in% input$select_view_data) { 
-            input$select_participants
-            input$scanpath_index
+            input$select_participants # get participants
+            input$scanpath_index # get with or without fixation index from checkbox
             draw_scanpaths() 
         }
+        
+        # if aois is selected in select_view_data, get new_aoi_listener reactive value and draw aois
         if ('aois' %in% input$select_view_data) { 
             new_aoi_listener()
             draw_aois()
         }
+        
     }, height = 640, width = 800)
     
+    # download handler for save_image
     output$save_image <- downloadHandler(
+        
+        # get filename
         filename = function() {
             paste0(global.stimuli[isolate(input$select_stimulus), 'Stimulus'], "-",
                    paste(isolate(input$select_view_data), collapse = "-"), 
                    ".png") 
-        }, 
+        },
+        
+        # get file content
         content = function(file) {
             
             path <- normalizePath(file.path(paste0('./www/', global.stimuli[isolate(input$select_stimulus), 'Content'])))
@@ -172,6 +244,7 @@ server <- function(input, output) {
                  ylab='',  #
                  bty='n'   # no box border around plot area
             )
+            
             rasterImage(jpg, 1, res[2], res[1], 1)
             
             if ('heatmap' %in% isolate(input$select_view_data)) {
@@ -189,20 +262,34 @@ server <- function(input, output) {
             dev.off()
         }, contentType = 'image/png')
 
-    
+    # if save_aoi action button is clicked
     observeEvent(input$save_aoi, {
+        
+        # set aoi.dims to the aoi brush selected
         aoi.dims <- isolate(input$aoi_brush)
+        
+        # if the dims are not null (i.e. an AOI is selected)
         if (!is.null(aoi.dims)) {
             
+            # get name from select_stimulus checkbox
             stimulus.name <- global.stimuli[isolate(input$select_stimulus), 'Stimulus']
+            
+            # get stimulus AOIs for specific stimulus from session/global AOIs
             stimulus.aois <- session.aois[session.aois$stimulus.name == stimulus.name, ]
             
+            # change aoi index to 1
             stimulus.aoi.index <- 1
+            
+            # if there are any AOIs saved for the given stimulus
             if (nrow(stimulus.aois) > 0) {
+                # update the aoi index accordingly by finding the last one and adding 1
                 stimulus.aoi.index <- max(stimulus.aois$aoi.index) + 1
             }
+            
+            # update the stimulus AOI name by concatenating AOI with the AOI index
             stimulis.aoi.name <- paste0("AOI", sprintf("%03d", stimulus.aoi.index))
             
+            # update session AOIs by updating the data frame (<<- assigns to parent/global environment)
             session.aois <<- rbind(session.aois, data.frame(
                 stimulus.name = stimulus.name,
                 stimulus.filename = global.stimuli[isolate(input$select_stimulus), 'Content'],
@@ -220,10 +307,16 @@ server <- function(input, output) {
         }
     })
     
+    # draw heatmap function
     draw_heatmap <- function() {
         
+        # get content / image
         stimulus.content <- global.stimuli[isolate(input$select_stimulus), 'Content']
+        
+        # get stimulus name from 
         stimulus.name <- global.eye.data[global.eye.data$Content == stimulus.content, 'Stimulus'][1]
+        
+        # get eye data from global eye data, specifically info for given stimulus + eye fixation
         stimulus.eye.data <- global.eye.data[global.eye.data$Stimulus == stimulus.name & 
                                                  global.eye.data$Category.Group == 'Eye' &
                                                  global.eye.data$Category == 'Fixation' &
