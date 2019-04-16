@@ -414,12 +414,16 @@ server <- function(input, output) {
         # if the selected stimulus has any AOIs
         if (nrow(stimulus.aois) > 0) {
             
-            # 
+            # for each aoi in aois
             for (aoi in 1:nrow(stimulus.aois)) {
+                
+                # get all four coordinates
                 xleft <- stimulus.aois[aoi, 'xleft']
                 ybottom <- stimulus.aois[aoi, 'ybottom']
                 xright <- stimulus.aois[aoi, 'xright']
                 ytop <- stimulus.aois[aoi, 'ytop']
+                
+                # draw rectangle
                 rect(
                     xleft = xleft,
                     ybottom = ybottom,
@@ -427,35 +431,58 @@ server <- function(input, output) {
                     ytop = ytop,
                     col = rgb(1, 0, 0, alpha = 0.5)
                 )
+                
+                # get center value
                 center <- c(mean(c(xleft, xright)), mean(c(ybottom, ytop)))
+                
+                # output text of center position + label from aoi name
                 text(center[1], center[2], labels = stimulus.aois[aoi, 'aoi.name'])
             }
         }
     }
     
+    # set up empty list
     obsList <- list()
+    
+    # this renders the AOI controls if the condition in the conditional panel is satisfied
     output$aoi_ctls <- renderUI({
-        new_aoi_listener()
+        new_aoi_listener()  # QUESTION: is this getting the reactive variable? where is it being used?
+        
+        # get stimulus name + aois for that name
         stimulus.name <- global.stimuli[input$select_stimulus, 'Stimulus']
         stimulus.aois <- session.aois[session.aois$stimulus.name == stimulus.name, ]
         
+        # create html table with given class
         tags$table(class = "table shiny-table table- spacing-s",
+            
+            # with one row and two columns (this is the header)
             tags$thead(
                 tags$tr(
                     tags$th("AOI Name"),
                     tags$th("Delete AOI")
                 )
             ),
+            
+            # set up body
             tags$tbody(
+              
+                # create list with a function applied on aoi name (in this case, a)
                 tagList(
+                        
                     lapply(stimulus.aois$aoi.name, function(a) {
+                      
+                        # set up button's id by using gsub to replace all spaces with '-'s
                         button.id <- gsub(" ", "-", paste(stimulus.name, a, "delete"))
+                        
+                        # QUESTION: not sure what this does?
                         if (is.null(obsList[[button.id]])) {
-                            obsList[[button.id]] <<- observeEvent(input[[button.id]], {
+                            obsList[[button.id]] <<- observeEvent(input[[button.id]], { # if button is clicked, update session AOIs to remove current AOI?
                                 session.aois <<- session.aois[!(session.aois$stimulus.name == stimulus.name & session.aois$aoi.name == a), ]
-                                new_aoi_listener(nrow(session.aois))
+                                new_aoi_listener(nrow(session.aois)) # QUESTION?
                             })
                         }
+                        
+                        # set up one row with name of AOI and the delete button
                         tags$tr(
                             tags$td(a),
                             tags$td(actionButton(button.id, "Delete"))
@@ -466,122 +493,195 @@ server <- function(input, output) {
         )
     })
     
+    # event handler for when file is selected to import AOI template
     observeEvent(input$import_aoi_template, {
+        
+        # read file and AOIs from file
         file <- input$import_aoi_template
         aois <- read.csv(file$datapath, header = TRUE)
         
+        # update stimulus name, update session AOIs with only AOIs for stimulus
         stimulus.name <- global.stimuli[isolate(input$select_stimulus), 'Stimulus']
         session.aois <<- session.aois[session.aois$stimulus.name != stimulus.name, ]
         
+        # update AOI stimulus name + filename in aois data struct read from csv
         aois$stimulus.name <- stimulus.name
         aois$stimulus.filename = global.stimuli[isolate(input$select_stimulus), 'Content']
         
+        # update session AOIs with new AOI read in from file
         session.aois <<- rbind(session.aois, aois)
+        
+        # clear AOI listener (?)
         new_aoi_listener(0)
+        
+        # QUESTION: update AOI listener with the new number of AOIs?
         new_aoi_listener(nrow(session.aois))
     })
     
+    # download handler for saving an AOI template
     output$export_aoi_template <- downloadHandler(
+        
+        # create filename
         filename = function() {
             paste0(global.stimuli[isolate(input$select_stimulus), 'Stimulus'], "-aoi-template.csv")
         }, 
+        
+        # create file content for AOI template
         content = function(file) {
+            # set up the AOI's columns
             aoi.template.cols <- c('aoi.index', 'aoi.name', 'xleft', 'ybottom', 'xright', 'ytop')
+            
+            # check if session AOIs is greater than 0 (ergo there is something to be exported)
             if (nrow(session.aois) > 0) {
                 stimulus.name <- global.stimuli[isolate(input$select_stimulus), 'Stimulus']
                 write.csv(session.aois[session.aois$stimulus.name == stimulus.name, aoi.template.cols], 
                           file = file, row.names = F)
-            } else {
+            } else { # QUESTION: write empty csv in else case?
                 write.csv(
                     setNames(data.frame(matrix(ncol = length(aoi.template.cols), nrow = 0)), 
                              aoi.template.cols),
                     file = file, row.names = F
                 )
             }
-            
         },
+        
+        # set content type
         contentType = 'text/csv'
-
     )
     
+    # save fixation data download handler
     output$export_aoi_eye_data <- downloadHandler(
+      
+        # create filename
         filename = function() {
             paste0(global.stimuli[isolate(input$select_stimulus), 'Stimulus'], "-data.csv")
         },
+        
+        # create file content
         content = function(file) {
+            # get eye data 
             eye.data <- annotate_data_aois()
+            
+            # only get specific columns from eye data
             eye.data <- eye.data[, c('Participant', 'Stimulus', 'X', 'Y', 'Start', 'End', 
                                      'Duration', 'AOI')]
+            
+            # set the names of each object (header for the above data)
             names(eye.data) <- c('Participant', 'Stimulus', 'Fixation X', 'Fixation Y', 'Fixation Start Time', 'Fixation End Time', 
                                  'Fixation Duration', 'AOI')
+            
+            # write to csv file
             write.csv(eye.data, file = file, row.names = F)
         },
+        
+        # set content type
         contentType = 'text/csv'
     )
     
+    # AOI participant stats download handler
     output$export_aoi_participant_stats <- downloadHandler(
+        
+        # create filename
         filename = function() {
             paste0(global.stimuli[isolate(input$select_stimulus), 'Stimulus'], "-participant-aoi-stats.csv")
         },
+        
+        # create file content
         content = function(file) {
             eye.data.stats <- calculate_aoi_p_stats()
+            
+            # if the eye data stats are present
             if (nrow(eye.data.stats) > 0) {
+                
+              # get eye data stats for specific columns
                 eye.data.stats <- eye.data.stats[, c('Participant', 'Stimulus', 'AOI', 'AOI.Area', 'Start.first', 'Duration.total', 
                                                      'Duration.mean', 'Start.count', 'Glances', 'Revisits')]
+                
+                # header for columns
                 names(eye.data.stats) <-  c('Participant', 'Stimulus', 'AOI', 'AOI Area', 'Time To First Fixation', 'Dwell Time', 
                                             'Average Fixation Time', 'Fixation Count', 'Glances', 'Revisits')
             }
+            
+            # write to csv file
             write.csv(eye.data.stats, file = file, row.names = F)
         },
+        # set content type
         contentType = 'text/csv'
     )
     
-    
+    # AOI stats download handler
     output$export_aoi_stats <- downloadHandler(
+      
+        # create filename
         filename = function() {
             paste0(global.stimuli[isolate(input$select_stimulus), 'Stimulus'], "-aoi-stats.csv")
         },
+        
+        # create file content
         content = function(file) {
-            eye.data.stats <- calculate_aoi_stats()
+            eye.data.stats <- calculate_aoi_stats() 
             
+            # if eye data stats exist
             if (nrow(eye.data.stats) > 0) {
             
+                # get stats for specific columns
                 eye.data.stats <- eye.data.stats[, c('Stimulus', 'AOI', 'AOI.Area', 'Participant.id.uniq', 
                                                      'Duration.total.total', 'Duration.total.mean', 'Start.count.total',
                                                       'Start.first.first', 'Glances.total', 'Revisits.total')]
             
+                # set header row
                 names(eye.data.stats) <-  c('Stimulus', 'AOI', 'AOI Area', 'Participant Hit Count', 
                                             'Total Dwell Time', 'Average Dwell Time', 'Total Fixation Count', 
                                             'Min Time To First Fixation', 'Total Glances Count', 'Total Revisits Count')
             }
+            
+            # write to csv
             write.csv(eye.data.stats, file = file, row.names = F)
         },
+        
+        # set content type
         contentType = 'text/csv'
     )
     
+    # table output renderer if an AOI exists
     output$aoi_output_table <- renderTable({
-        input$select_stimulus
-        input$select_participants
-        new_aoi_listener()
-        eye.data.stats <- calculate_aoi_stats()  
+        input$select_stimulus # get stimulus
+        input$select_participants # get participants
+        new_aoi_listener() # QUESTION: get reactive value?
+        
+        # calculate current AOI stats 
+        eye.data.stats <- calculate_aoi_stats()
+        
+        # if there are no eye data stats, return empty data frame
         if (nrow(eye.data.stats) == 0) return(data.frame())
+        
+        # if eye data stats exist, pick specific columns
         eye.data.stats <- eye.data.stats[, c('Stimulus', 'AOI', 'AOI.Area', 'Participant.id.uniq', 
                                              'Start.count.total', 'Glances.total', 'Revisits.total')]
         
+        # set up header for specific columns
         names(eye.data.stats) <-  c('Stimulus', 'AOI', 'AOI Area', 'Participant Hit Count', 
                                     'Total Fixation Count', 'Total Glances Count', 'Total Revisits Count')
+        
+        #return eye data stats
         return(eye.data.stats)
     })
     
     # AOI calculations below
-    
     calculate_aoi_stats <- function() {
+        
+        # calculate participant statistics
         eye.data.p.stats <- calculate_aoi_p_stats()
         
+        # QUESTION: if returned value is null, return empty data frame
         if (nrow(eye.data.p.stats) == 0) return(data.frame())
 
-        eye.data.stats <- do.call(data.frame, 
+        
+        # create a dataframe takes in the aggregate() as arguments
+        eye.data.stats <- do.call(data.frame,
+                                  # QUESTION: all within cbind() depends on AOI, AOI.Area, and Stimulus?
                                   aggregate(cbind(Duration.total, Start.first, Start.count, Participant.id, Glances, Revisits) ~ AOI + AOI.Area + Stimulus, eye.data.p.stats,
+                                            # QUESTION: for all values here, update the above values
                                             FUN = function(x) { 
                                                 c(total=as.integer(sum(x)), 
                                                   first=as.integer(min(x)), 
@@ -591,18 +691,28 @@ server <- function(input, output) {
                                             }
                                   ))
         
+        # order eye data stats alphabetically
         eye.data.stats <- eye.data.stats[order(eye.data.stats$AOI), ] 
         
         return(eye.data.stats)
     }
     
+    # calculate participant AOI stats
     calculate_aoi_p_stats <- function() {
         eye.data <- annotate_data_aois()
+        
+        # if null data returned, return empty data frame
         if (nrow(eye.data) == 0) return(data.frame())
+        
+        # convert duration + start to numeric values
         eye.data$Duration <- as.numeric(eye.data$Duration)
         eye.data$Start <- as.numeric(eye.data$Start)
+        
+        # create a dataframe that takes in the aggregate() as an argument
         eye.data.stats <- do.call(data.frame, 
+                                  # QUESTION: all within cbind() depends on Glances, AOI, AOI.Area, Participant, Participant.id, Stimulus?
                                   aggregate(cbind(Duration, Start) ~ Glances + AOI + AOI.Area + Participant + Participant.id + Stimulus, eye.data, 
+                                            # QUESTION: for all values here, update the above values
                                             FUN = function(x) { 
                                                     c(total=as.integer(sum(x)), 
                                                       first=as.integer(min(x)), 
@@ -611,43 +721,64 @@ server <- function(input, output) {
                                                 }
                                             ))
         
+        # set up revisits variable to be the number of glances for a location - 1 (removing first visit)
         eye.data.stats$Revisits <- eye.data.stats$Glances - 1
         
         return(eye.data.stats)
     }
     
+    # initial helper function utilized in calculate_aoi_p_stats and calculate_aoi_stats
     annotate_data_aois <- function() {
         
+        # get stimulus content and name
         stimulus.content <- global.stimuli[isolate(input$select_stimulus), 'Content']
         stimulus.name <- global.eye.data[global.eye.data$Content == stimulus.content, 'Stimulus'][1]
+        
+        #get stimulus eye data from global eye data (picking for spiecific stimulus, categories + participants that are selected)
         stimulus.eye.data <- global.eye.data[global.eye.data$Stimulus == stimulus.name & 
                                              global.eye.data$Category.Group == 'Eye' &
                                              global.eye.data$Category == 'Fixation' &
                                              global.eye.data$Participant %in% isolate(input$select_participants), ]
         
+        # if the above == 0 then return out of function
         if (nrow(stimulus.eye.data) == 0) return(stimulus.eye.data)
         
+        # update stimulus AOIS from session AOIs (for specific stimulus filename)
         stimulus.aois <- session.aois[session.aois$stimulus.filename == stimulus.content, ]
+        
+        # update fixation position data to numeric value
         stimulus.eye.data$Fixation.Position.X..px. <- as.numeric(as.character(stimulus.eye.data$Fixation.Position.X..px.))
         stimulus.eye.data$Fixation.Position.Y..px. <- as.numeric(as.character(stimulus.eye.data$Fixation.Position.Y..px.))
+        
+        # empty index + name + area
         stimulus.eye.data$AOI.Name <- ""
         stimulus.eye.data$AOI.Index <- 0
         stimulus.eye.data$AOI.Area <- ""
         
+        # if AOIs exist for this stimuli
         if (nrow(stimulus.aois) > 0) {
+          
+            # loop through all AOIs
             for (i in 1:nrow(stimulus.aois)) {
+                # aoi = current AOI
                 aoi <- stimulus.aois[i, ]
+                
+                # calculate current AOI's area
                 aoi$aoi.area <- as.integer((aoi$xright - aoi$xleft) * (aoi$ytop - aoi$ybottom))
+                
+                # for all values in stimulus.eye.data that satisfy given conditions, set AOI.Name to aoi.name
                 stimulus.eye.data[stimulus.eye.data$Fixation.Position.X..px. >= aoi$xleft &
                                       stimulus.eye.data$Fixation.Position.X..px. <= aoi$xright &
                                       stimulus.eye.data$Fixation.Position.Y..px. >= aoi$ybottom &
                                       stimulus.eye.data$Fixation.Position.Y..px. <= aoi$ytop, 'AOI.Name'] <- aoi$aoi.name
                 
+                # for all values in stimulus.eye.data that satisfy given conditions, set AOI.Index to aoi.index
                 stimulus.eye.data[stimulus.eye.data$Fixation.Position.X..px. >= aoi$xleft &
                                       stimulus.eye.data$Fixation.Position.X..px. <= aoi$xright &
                                       stimulus.eye.data$Fixation.Position.Y..px. >= aoi$ybottom &
                                       stimulus.eye.data$Fixation.Position.Y..px. <= aoi$ytop, 'AOI.Index'] <- aoi$aoi.index
                 
+                # for all values in stimulus.eye.data that satisfy given conditions, set AOI.Area to aoi.area
                 stimulus.eye.data[stimulus.eye.data$Fixation.Position.X..px. >= aoi$xleft &
                                       stimulus.eye.data$Fixation.Position.X..px. <= aoi$xright &
                                       stimulus.eye.data$Fixation.Position.Y..px. >= aoi$ybottom &
@@ -655,17 +786,25 @@ server <- function(input, output) {
             }
         }
         
+        # create dataframe that takes specific columns from stimulus.eye.data
         df <- stimulus.eye.data[, c('Participant', 'id', 'Stimulus', 'Fixation.Position.X..px.', 'Fixation.Position.Y..px.', 
                                     'Event.Start.Trial.Time..ms.', 'Event.End.Trial.Time..ms.', 'Event.Duration..ms.', 'AOI.Name', 'AOI.Index', 'AOI.Area')]
         
+        # set Stimulus variable of df to the stimulus selected
         df$Stimulus <- global.stimuli[isolate(input$select_stimulus), 'Stimulus']
         
+        # QUESTION: add "Glaces" column to dataframe, which is set up by going through each participant and running the below function
         df <- cbind(df, 'Glances' = unlist(by(df, df$Participant, 
-                                               function (df) { 
+                                               function (df) {
+                                                   # calculate run length encoding for (fixation count)? in df
                                                    glance.table <- data.frame(table(rle(df$AOI.Index)$values))
+                                                   
+                                                   # apply given function to df for AOI.Index column
                                                    sapply(df$AOI.Index, function(a) { glance.table[glance.table$Var1 == a, 'Freq'] })
                                                }
         )))
+        
+        # set up header to dataframe
         names(df) <- c('Participant', 'Participant.id', 'Stimulus', 'X', 'Y', 'Start', 'End', 'Duration', 'AOI', 'AOI.Index', 'AOI.Area', 'Glances')
         
         # express area as percent of total
