@@ -17,3 +17,5 @@ global.aois <- data.frame()
 if (file.exists("data/aois.csv")) {
   global.aois <- read.csv("data/aois.csv", stringsAsFactors = FALSE)
 }
+
+enableBookmarking(store = "url")
