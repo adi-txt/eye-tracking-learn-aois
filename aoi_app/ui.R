@@ -79,11 +79,11 @@ function(request) {
                     
                     # aoi participant stats button div with handler, help text 
                     downloadButton("export_aoi_participant_stats", "Save Participant AOI Stats"),
-                    helpText("One participant and aoi per row."),
+                    helpText("One participant and AOI per row."),
                     
                     # aoi stats button div with handler, help text 
                     downloadButton("export_aoi_stats", "Save AOI Stats"),
-                    helpText("One aoi per row."),
+                    helpText("One AOI per row."),
                     
                     br(), # line break
                     
