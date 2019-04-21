@@ -238,7 +238,8 @@ server <- function(input, output) {
       # draw line segments for given x, y data with given colors, line width = 2, type = 'o'
       lines(x = data$Fixation.Position.X..px.,
             y = data$Fixation.Position.Y..px., 
-            col = data$color.name,
+            # col = data$color.name,
+            col = rgb(data$red, data$green, data$blue, maxColorValue = 255, alpha=128),
             cex = data$Event.Duration..ms./80, # QUESTION: why divided by .8?
             type = "o",
             lwd = 2,
